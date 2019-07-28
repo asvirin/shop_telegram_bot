@@ -71,7 +71,7 @@ def get_keyboard_with_products():
     except HTTPError as error:
         raise MyLogsHandler(error)
 
-def get_product_link_picture(photo_id):
+def get_product_picture_link(photo_id):
     try:
         response = requests.get('{}/files/{}--'.format(MOLTIN_API_URL, photo_id), headers=headers)
         check_answer_json(response)
@@ -104,9 +104,9 @@ def get_product_full_description(user_choice_product_id):
                                                                                        product_availability,
                                                                                        product_availability_count)
 
-        product_link_picture = get_product_link_picture(photo_id)
+        product_picture_link = get_product_picture_link(photo_id)
 
-        return product_caption, product_link_picture
+        return product_caption, product_picture_link
     
     except HTTPError as error:
         raise MyLogsHandler(error)    
@@ -219,7 +219,7 @@ def handle_menu(bot, update):
     chat_id = update.callback_query.message.chat_id
     message_id = update.callback_query.message.message_id
         
-    product_caption, product_link_picture  = get_product_full_description(user_reply)
+    product_caption, product_picture_link  = get_product_full_description(user_reply)
     
     button = [[InlineKeyboardButton("1 ядро", callback_data='{},1'.format(user_reply)),
                 InlineKeyboardButton("2 ядра", callback_data='{},2'.format(user_reply)),
@@ -229,7 +229,7 @@ def handle_menu(bot, update):
     keyboard = InlineKeyboardMarkup(button)
 
     bot.delete_message(chat_id=chat_id, message_id = message_id)
-    bot.send_photo(chat_id=chat_id, photo=product_link_picture, caption=product_caption, reply_markup=keyboard)
+    bot.send_photo(chat_id=chat_id, photo=product_picture_link, caption=product_caption, reply_markup=keyboard)
     
     return "HANDLE_DESCRIPTION"
 
