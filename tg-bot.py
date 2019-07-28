@@ -13,16 +13,19 @@ DATABASE = None
 MOLTIN_API_URL = 'https://api.moltin.com/v2'
 MOLTIN_API_OAUTH_URL = 'https://api.moltin.com/oauth/access_token'
 
-def error_callback(bot, update, error):
-    try:
-        logging.error(str(update))
-        update.message.reply_text(text='Ошибка')
-    except Exception as error:
-        logging.critical('Ошибка c API:\n{}\n Напишите в поддержку'.format(error))
+
+class MyLogsHandler(logging.Handler):
+    def emit(self, record):
+        telegram_bot_information_token = os.environ['TELEGRAM_BOT_INFORMATION_TOKEN']
+        chat_id_telegram_information = os.environ['CHAT_ID_TELEGRAM_INFORMATION']
+        log_entry = self.format(record)
+        bot_error = telegram.Bot(token=telegram_bot_information_token)
+        bot_error.send_message(chat_id=chat_id_telegram_information, text=log_entry)
+        
         
 def check_answer_json(r):
     if 'errors' in r.json():
-        raise CmsError('CMS отдает ошибку:\n{}\n Напишите в поддержку'.format(r.json()))
+        raise MyLogsHandler(r.json())
 
 def get_access_token(client_id, client_secret, grant_type):
     try:
@@ -39,11 +42,12 @@ def get_access_token(client_id, client_secret, grant_type):
         token_type = answer['token_type']
         authentication_token = '{} {}'.format(token_type, access_token)
         return authentication_token
+    
     except HTTPError as error:
-        raise CmsError(error)
+        raise MyLogsHandler(error)
         
     except ConnectionError as error:
-        raise CmsError(error)
+        raise MyLogsHandler(error)
         
 
 def get_keyboard_with_products():
@@ -65,11 +69,11 @@ def get_keyboard_with_products():
         return keyboard
     
     except HTTPError as error:
-        raise CmsError(error)
+        raise MyLogsHandler(error)
 
 def get_product_link_picture(photo_id):
     try:
-        response = requests.get('{}/files/{}'.format(MOLTIN_API_URL, photo_id), headers=headers)
+        response = requests.get('{}/files/{}--'.format(MOLTIN_API_URL, photo_id), headers=headers)
         check_answer_json(response)
         answer = response.json()
         link_picture = answer['data']['link']['href']
@@ -77,7 +81,7 @@ def get_product_link_picture(photo_id):
         return link_picture
     
     except HTTPError as error:
-        raise CmsError(error)
+        raise MyLogsHandler(error)
 
 def get_product_full_description(user_choice_product_id):
     try:
@@ -105,7 +109,7 @@ def get_product_full_description(user_choice_product_id):
         return product_caption, product_link_picture
     
     except HTTPError as error:
-        raise CmsError(error)    
+        raise MyLogsHandler(error)    
 
 def get_user_card(chat_id):
     try:
@@ -148,7 +152,7 @@ def get_user_card(chat_id):
         return description_card, keyboard
     
     except HTTPError as error:
-        raise CmsError(error)    
+        raise MyLogsHandler(error)    
 
 def get_user_state(user_reply, chat_id):
     reply_to_start = ['/start', '/back_to_list_products']
@@ -185,7 +189,7 @@ def create_customer(chat_id, email):
         return answer
     
     except HTTPError as error:
-        raise CmsError(error)
+        raise MyLogsHandler(error)
             
 def get_customer(customer_id):
     try:
@@ -195,7 +199,7 @@ def get_customer(customer_id):
         return answer
 
     except HTTPError as error:
-        raise CmsError(error)
+        raise MyLogsHandler(error)
 
 def start(bot, update):
     keyboard = get_keyboard_with_products()
@@ -247,7 +251,7 @@ def handle_description(bot, update):
         return "HANDLE_DESCRIPTION"
     
     except HTTPError as error:
-        raise CmsError(error)
+        raise MyLogsHandler(error)
 
 def handle_card(bot, update):
     chat_id = update.callback_query.message.chat_id
@@ -281,7 +285,7 @@ def get_expected_email(bot, update):
                 update.message.reply_text('Введите электронную почту'.format(user_reply))
                 return "WAITING_EMAIL"
             elif 'errors' in customer_data:
-                raise CmsError('CMS отдает ошибку:\n{}'.format(r.json()))
+                raise MyLogsHandler(customer_data)
                 
         except:
             customer_id = customer_data['data']['id']
@@ -326,14 +330,14 @@ def handle_users_reply(bot, update):
         next_state = state_handler(bot, update)
         database.set(chat_id, next_state)
     except Exception as error:
-        raise error_callback(bot, update, error)
+        raise MyLogsHandler(error)
 
 def get_database_connection():
     global DATABASE
     if DATABASE is None:
-        database_password = os.environ['REDIS_PASSWORD']
-        database_host = os.environ['REDIS_HOST']
-        database_port = os.environ['REDIS_PORT']
+        database_password = 'ATR26QHUXQgXBRFVOonze1WssF5gjgqe'
+        database_host = 'redis-15821.c98.us-east-1-4.ec2.cloud.redislabs.com'
+        database_port = 15821
         DATABASE = redis.Redis(host=database_host, port=database_port, password=database_password)
     return DATABASE
 
@@ -342,20 +346,22 @@ if __name__ == '__main__':
     client_secret_moltin = os.environ['CLIENT_SECRET_MOLTIN']
     grant_type_moltin = 'client_credentials'
     authentication_token = get_access_token(client_id_moltin, client_secret_moltin, grant_type_moltin)        
-    headers = {'Authorization': authentication_token}        
+    headers = {'Authorization': authentication_token}   
             
     telegram_token = os.environ['TELEGRAM_TOKEN']
     updater = Updater(telegram_token)
     
-    class CmsError(Exception):
-        def emit(self, record):
-            log_entry = self.format(record)
-            bot.send_message(chat_id=chat_id, text=log_entry)
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    logger.addHandler(MyLogsHandler())
     
-    dispatcher = updater.dispatcher
-    dispatcher.add_handler(CallbackQueryHandler(handle_users_reply))
-    dispatcher.add_handler(MessageHandler(Filters.text, handle_users_reply))
-    dispatcher.add_handler(CommandHandler('start', handle_users_reply))
-    dispatcher.add_error_handler(error_callback)
-    updater.start_polling()
-    updater.idle()
+    try:
+        updater = Updater(telegram_token)
+        dispatcher = updater.dispatcher
+        dispatcher.add_handler(CallbackQueryHandler(handle_users_reply))
+        dispatcher.add_handler(MessageHandler(Filters.text, handle_users_reply))
+        dispatcher.add_handler(CommandHandler('start', handle_users_reply))
+        updater.start_polling()
+        updater.idle()
+    except Exception as error:
+        raise MyLogsHandler(error)
