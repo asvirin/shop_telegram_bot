@@ -21,8 +21,10 @@
 3) REDIS_PASSWORD — Пароль базы данных Redis;
 4) REDIS_DB — Номер базы данных Redis, по умолчанию ставить 0;
 5) TELEGRAM_TOKEN — токен для авторизации бота в Телеграме;
-6) CLIENT_ID_MOLTIN — ваш id в Moltin;
-7) CLIENT_SECRET_MOLTIN — секретный ключ к вашему аккаунту в Moltin.
+6) TELEGRAM_BOT_INFORMATION_TOKEN — токен для авторизации бота для информационных сообщений;
+7) CHAT_ID_TELEGRAM_INFORMATION — кому бот для информационных сообщений будет писать;
+8) CLIENT_ID_MOLTIN — ваш id в Moltin;
+9) CLIENT_SECRET_MOLTIN — секретный ключ к вашему аккаунту в Moltin.
 
 ### Этап 3. Запустить бота 
 #### Пример запуска в консоли
