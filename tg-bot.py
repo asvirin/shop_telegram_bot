@@ -22,7 +22,6 @@ class MyLogsHandler(logging.Handler):
         bot_error = telegram.Bot(token=telegram_bot_information_token)
         bot_error.send_message(chat_id=chat_id_telegram_information, text=log_entry)
         
-        
 def check_answer_json(r):
     if 'errors' in r.json():
         raise MyLogsHandler(r.json())
@@ -95,8 +94,6 @@ def get_product_full_description(user_choice_product_id):
         product_availability = product['data']['meta']['stock']['availability']
         product_availability_count = product['data']['meta']['stock']['level']
         photo_id = product['data']['relationships']['main_image']['data']['id']
-
-
 
         product_caption = '{}\n\nОписание:\n{}\n\nСтоимость в месяц: {},\n {}, количество: {}'.format(product_name, 
                                                                                        product_description,
