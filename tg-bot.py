@@ -13,7 +13,6 @@ DATABASE = None
 MOLTIN_API_URL = 'https://api.moltin.com/v2'
 MOLTIN_API_OAUTH_URL = 'https://api.moltin.com/oauth/access_token'
 
-
 class MyLogsHandler(logging.Handler):
     def emit(self, record):
         telegram_bot_information_token = os.environ['TELEGRAM_BOT_INFORMATION_TOKEN']
