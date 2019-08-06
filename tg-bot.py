@@ -281,29 +281,19 @@ def handle_users_reply(bot, update):
     else:
         return
     
-    try:
-        user_state = get_user_state(user_reply, chat_id)
+    user_state = get_user_state(user_reply, chat_id)
 
-        states_functions = {
+    states_functions = {
             'START': start,
             'HANDLE_MENU': handle_menu,
             'HANDLE_DESCRIPTION': handle_description,
             'HANDLE_CARD': handle_card,
             'WAITING_EMAIL': get_expected_email
         }
-        state_handler = states_functions[user_state]
+    state_handler = states_functions[user_state]
 
-        next_state = state_handler(bot, update)
-        database.set(chat_id, next_state)
-        
-    except ConnectionError as error:
-        logger.exception(f'Возникла ошибка с подключением к базе Redis: {error}')
-        
-    except HTTPError as error:
-        logger.exception(f'Возникла ошибка с HTTP-ответом от базы Redis: {error}')
-        
-    except Exception:
-        logger.exception('Подключение и HTTP-статус от базы Redis в норме, возникла другая ошибка↓')
+    next_state = state_handler(bot, update)
+    database.set(chat_id, next_state)
 
 def get_database_connection():
     global database
