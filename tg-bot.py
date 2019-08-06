@@ -334,5 +334,5 @@ if __name__ == '__main__':
         logger.exception(f'Возникла ошибка с HTTP-статусом: {error}')
     
     #тут отлавливаем все ошибки, которые привели к падению бота
-    except Exception:
-        logger.exception('Подключение и HTTP-статус в норме, возникла другая ошибка в боте-магазине↓')
+    except Exception as error:
+        logger.exception(f'Подключение и HTTP-статус в норме, возникла другая ошибка в боте-магазине: {error}')
