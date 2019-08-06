@@ -21,7 +21,6 @@ class MyLogsHandler(logging.Handler):
         log_entry = self.format(record)
         bot_error = telegram.Bot(token=telegram_token_information_message)
         bot_error.send_message(chat_id=chat_id_information_message, text=log_entry)
-        
 
 def check_response(response):
     answer = response.json()
