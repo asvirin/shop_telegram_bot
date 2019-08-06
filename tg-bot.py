@@ -25,34 +25,27 @@ class MyLogsHandler(logging.Handler):
 
 def check_response(response):
     answer = response.json()
+    
     if 'errors' in answer:
-        logger.exception(answer['errors'])
+        raise HTTPError(answer['errors'])
         
     response.raise_for_status()
 
 def get_access_token(client_id, client_secret, grant_type):
-    try:
-        data = {
-          'client_id': client_id,
-          'client_secret': client_secret,
-          'grant_type': grant_type
-        }
-        response = requests.post(MOLTIN_API_OAUTH_URL, data=data)
-        check_response(response)
-        answer = response.json()
-
-        access_token = answer['access_token']
-        token_type = answer['token_type']
-        authentication_token = '{} {}'.format(token_type, access_token)
-        
-        return authentication_token
+    data = {
+        'client_id': client_id,
+        'client_secret': client_secret,
+        'grant_type': grant_type}
     
-    except HTTPError as error:
-        logger.exception(error)
+    response = requests.post(MOLTIN_API_OAUTH_URL, data=data)
+    check_response(response)
+    answer = response.json()
+
+    access_token = answer['access_token']
+    token_type = answer['token_type']
+    authentication_token = '{} {}'.format(token_type, access_token)
         
-    except ConnectionError as error:
-        logger.exception(error)
-        
+    return authentication_token
 
 def get_keyboard_with_products():
     response = requests.get('{}/products'.format(MOLTIN_API_URL), headers=headers)
@@ -146,7 +139,7 @@ def get_user_state(user_reply, chat_id):
     reply_to_start = ['/start', '/back_to_list_products']
     reply_to_card = ['/card']
     replt_to_pay = ['/pay']
-    
+
     if user_reply in reply_to_start:
         user_state = 'START'
     elif user_reply in reply_to_card:
@@ -258,9 +251,9 @@ def get_expected_email(bot, update):
             if customer_data['errors'][0]['title'] == 'Failed Validation': 
                 update.message.reply_text('Введите электронную почту'.format(user_reply))
                 
-                return "WAITING_EMAIL"
+            return "WAITING_EMAIL"
                 
-        except:
+        except KeyError:
             customer_id = customer_data['data']['id']
             customer_data = get_customer(customer_id)
             customer_email = customer_data['data']['email']
@@ -288,22 +281,29 @@ def handle_users_reply(bot, update):
     else:
         return
     
-    user_state = get_user_state(user_reply, chat_id)
-    
-    states_functions = {
-        'START': start,
-        'HANDLE_MENU': handle_menu,
-        'HANDLE_DESCRIPTION': handle_description,
-        'HANDLE_CARD': handle_card,
-        'WAITING_EMAIL': get_expected_email
-    }
-    state_handler = states_functions[user_state]
-
     try:
+        user_state = get_user_state(user_reply, chat_id)
+
+        states_functions = {
+            'START': start,
+            'HANDLE_MENU': handle_menu,
+            'HANDLE_DESCRIPTION': handle_description,
+            'HANDLE_CARD': handle_card,
+            'WAITING_EMAIL': get_expected_email
+        }
+        state_handler = states_functions[user_state]
+
         next_state = state_handler(bot, update)
         database.set(chat_id, next_state)
-    except Exception as error:
-        logger.exception(error)
+        
+    except ConnectionError as error:
+        logger.exception(f'Возникла ошибка с подключением к базе Redis: {error}')
+        
+    except HTTPError as error:
+        logger.exception(f'Возникла ошибка с HTTP-ответом от базы Redis: {error}')
+        
+    except Exception:
+        logger.exception('Подключение и HTTP-статус от базы Redis в норме, возникла другая ошибка↓')
 
 def get_database_connection():
     global database
@@ -315,11 +315,9 @@ def get_database_connection():
     return database
 
 if __name__ == '__main__':
-    logger = logging.getLogger()
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(levelname)s:%(name)s:%(message)s')
     
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
     logger.addHandler(MyLogsHandler())
     
     logger.info('Бот-магазин запущен')
@@ -327,21 +325,24 @@ if __name__ == '__main__':
     client_id_moltin = os.environ['CLIENT_ID_MOLTIN']
     client_secret_moltin = os.environ['CLIENT_SECRET_MOLTIN']
     grant_type_moltin = 'client_credentials'
+    telegram_token = os.environ['TELEGRAM_TOKEN']
     
     try:
-        authentication_token = get_access_token(client_id_moltin, client_secret_moltin, grant_type_moltin)        
+        authentication_token = get_access_token(client_id_moltin, client_secret_moltin, grant_type_moltin)
         headers = {'Authorization': authentication_token}
-            
-        telegram_token = os.environ['TELEGRAM_TOKEN']
         updater = Updater(telegram_token)
+        dispatcher = updater.dispatcher
+        dispatcher.add_handler(CallbackQueryHandler(handle_users_reply))
+        dispatcher.add_handler(MessageHandler(Filters.text, handle_users_reply))
+        dispatcher.add_handler(CommandHandler('start', handle_users_reply))
+        updater.start_polling()
+        updater.idle()
         
-    except Exception as error:
-        logger.exception(error)
-
-    
-    dispatcher = updater.dispatcher
-    dispatcher.add_handler(CallbackQueryHandler(handle_users_reply))
-    dispatcher.add_handler(MessageHandler(Filters.text, handle_users_reply))
-    dispatcher.add_handler(CommandHandler('start', handle_users_reply))
-    updater.start_polling()
-    updater.idle()
+    except ConnectionError as error:
+        logger.exception(f'Возникла ошибка с подключением: {error}')
+        
+    except HTTPError as error:
+        logger.exception(f'Возникла ошибка с HTTP-статусом: {error}')
+        
+    except Exception:
+        logger.exception('Подключение и HTTP-статус в норме, возникла другая ошибка в боте-магазине↓')
