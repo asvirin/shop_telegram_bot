@@ -40,12 +40,11 @@ def get_headers():
     
     try:
         authentication_token = get_authentication_token()
-    except (requests.exceptions.ReadTimeout, requests.ConnectionError):
+    except (requests.exceptions.ReadTimeout, requests.exceptions.HTTPError, requests.ConnectionError):
         logger.exception('Проблемы с доступом к Moltin, бот уснул ↓')
         time.sleep(60)
     except Exception:
-        logger.exception('Возникла ошибка с получением токена, нужно решить, бот уснул на час ↓')
-        time.sleep(3600)
+        logger.exception('Возникла ошибка ↓')
     
     moltin_headers = {'Authorization': authentication_token}
     
@@ -56,25 +55,26 @@ def get_authentication_token():
     
     now_time = datetime.datetime.now()
     
-    if token_expires_time is None or moltin_headers is None or now_time < token_expires_time:
-        data = {'client_id': client_id_moltin,
+    if token_expires_time is not None and moltin_headers is not None and now_time > token_expires_time:
+        return authentication_token
+        
+
+    data = {'client_id': client_id_moltin,
                         'client_secret': client_secret_moltin,
                         'grant_type': grant_type_moltin}
 
-        response = requests.post(MOLTIN_API_OAUTH_URL, data=data)
-        answer = response.json()
-
-        expires_time = answer['expires']
-        token_expires_time = datetime.datetime.fromtimestamp(expires_time-600)
-
-        access_token = answer['access_token']
-        token_type = answer['token_type']
-        authentication_token = '{} {}'.format(token_type, access_token)
-
-        return authentication_token
+    response = requests.post(MOLTIN_API_OAUTH_URL, data=data)
+    check_response(response)
     
-    else:
-        return authentication_token
+    answer = response.json()
+    expires_time = answer['expires']
+    token_expires_time = datetime.datetime.fromtimestamp(expires_time-300)
+
+    access_token = answer['access_token']
+    token_type = answer['token_type']
+    authentication_token = '{} {}'.format(token_type, access_token)
+
+    return authentication_token
     
 def get_keyboard_with_products():
     headers = get_headers()
