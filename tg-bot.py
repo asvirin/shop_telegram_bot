@@ -44,7 +44,7 @@ def get_headers():
         logger.exception('Проблемы с доступом к Moltin, бот уснул ↓')
         time.sleep(60)
     except Exception:
-        logger.exception('Возникла ошибка ↓')
+        logger.exception('Возникла ошибка с получением токена, нужно решить, бот уснул на час ↓')
         time.sleep(3600)
     
     moltin_headers = {'Authorization': authentication_token}
