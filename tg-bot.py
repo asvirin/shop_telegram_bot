@@ -63,9 +63,7 @@ def get_authentication_token():
                         'client_secret': client_secret_moltin,
                         'grant_type': grant_type_moltin}
 
-    response = requests.post(MOLTIN_API_OAUTH_URL, data=data)
-    check_response(response)
-    
+    response = requests.post(MOLTIN_API_OAUTH_URL, data=data)    
     answer = response.json()
     expires_time = answer['expires']
     token_expires_time = datetime.datetime.fromtimestamp(expires_time-300)
