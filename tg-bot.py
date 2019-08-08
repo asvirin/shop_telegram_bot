@@ -4,12 +4,16 @@ import time
 import telegram
 import logging
 import redis
+import datetime
 from requests.exceptions import HTTPError, ConnectionError
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Filters, Updater
 from telegram.ext import CallbackQueryHandler, CommandHandler, MessageHandler
 
 database = None
+moltin_headers = None
+token_expires_time = None
+
 MOLTIN_API_URL = 'https://api.moltin.com/v2'
 MOLTIN_API_OAUTH_URL = 'https://api.moltin.com/oauth/access_token'
 
@@ -22,6 +26,7 @@ class MyLogsHandler(logging.Handler):
         bot_error = telegram.Bot(token=telegram_token_information_message)
         bot_error.send_message(chat_id=chat_id_information_message, text=log_entry)
 
+        
 def check_response(response):
     answer = response.json()
     
@@ -29,26 +34,52 @@ def check_response(response):
         raise HTTPError(answer['errors'])
         
     response.raise_for_status()
-
-def get_access_token(client_id, client_secret, grant_type):
-    data = {
-        'client_id': client_id,
-        'client_secret': client_secret,
-        'grant_type': grant_type}
     
-    response = requests.post(MOLTIN_API_OAUTH_URL, data=data)
-    check_response(response)
-    answer = response.json()
+def get_headers():
+    global moltin_headers
+    
+    try:
+        authentication_token = get_authentication_token()
+    except (requests.exceptions.ReadTimeout, requests.ConnectionError):
+        logger.exception('Проблемы с доступом к Moltin, бот уснул ↓')
+        time.sleep(60)
+    except Exception:
+        logger.exception('Возникла ошибка ↓')
+    
+    moltin_headers = {'Authorization': authentication_token}
+    
+    return moltin_headers
 
-    access_token = answer['access_token']
-    token_type = answer['token_type']
-    authentication_token = '{} {}'.format(token_type, access_token)
-        
-    return authentication_token
+def get_authentication_token():
+    global token_expires_time
+    
+    now_time = datetime.datetime.now()
+    
+    if token_expires_time is None or moltin_headers is None or now_time < token_expires_time:
+        data = {'client_id': client_id_moltin,
+                        'client_secret': client_secret_moltin,
+                        'grant_type': grant_type_moltin}
 
+        response = requests.post(MOLTIN_API_OAUTH_URL, data=data)
+        answer = response.json()
+
+        expires_time = answer['expires']
+        token_expires_time = datetime.datetime.fromtimestamp(expires_time-300)
+
+        access_token = answer['access_token']
+        token_type = answer['token_type']
+        authentication_token = '{} {}'.format(token_type, access_token)
+
+        return authentication_token
+    
+    else:
+        return authentication_token
+    
 def get_keyboard_with_products():
+    headers = get_headers()
     response = requests.get('{}/products'.format(MOLTIN_API_URL), headers=headers)
     check_response(response)
+    
     answer = response.json()
     products_data = answer['data']
 
@@ -64,18 +95,22 @@ def get_keyboard_with_products():
     return keyboard
 
 def get_product_link_picture(photo_id):
+    headers = get_headers()
     response = requests.get('{}/files/{}'.format(MOLTIN_API_URL, photo_id), headers=headers)
     check_response(response)
+    
     answer = response.json()
     link_picture = answer['data']['link']['href']
 
     return link_picture
 
 def get_product_full_description(user_choice_product_id):
+    headers = get_headers()
     response = requests.get('{}/products/{}'.format(MOLTIN_API_URL, user_choice_product_id), headers=headers)
     check_response(response)
+    
+    
     product = response.json()
-
     product_name = product['data']['name']
     product_description = product['data']['description']
     product_price = product['data']['meta']['display_price']['with_tax']['formatted']
@@ -99,6 +134,7 @@ def get_user_card(chat_id):
     description_card = ''
     button_keyboard = list()
 
+    headers = get_headers()
     response = requests.get('{}/carts/{}/items'.format(MOLTIN_API_URL, chat_id), headers=headers)
     check_response(response)
     client_basket = response.json()
@@ -120,6 +156,7 @@ def get_user_card(chat_id):
 
     response = requests.get('{}/carts/{}/'.format(MOLTIN_API_URL, chat_id), headers=headers)
     check_response(response)
+    
     answer = response.json()
     total_sum = answer['data']['meta']['display_price']['with_tax']['formatted']
 
@@ -157,7 +194,8 @@ def create_customer(chat_id, email):
             'type': 'customer',
             'name': str(chat_id),
             'email': str(email)}}
-
+    
+    headers = get_headers()
     response = requests.post('{}/customers'.format(MOLTIN_API_URL), headers=headers, json=data)
     #тут проверка не нужна, далее проверяется на наличие пользователя и валидность почты
     answer = response.json()
@@ -165,6 +203,7 @@ def create_customer(chat_id, email):
     return answer
             
 def get_customer(customer_id):
+    headers = get_headers()
     response = requests.get('{}/customers/{}'.format(MOLTIN_API_URL, customer_id), headers=headers)
     check_response(response)
     answer = response.json()
@@ -212,6 +251,7 @@ def handle_description(bot, update):
 
     data = {"data": {"id": "{}".format(product_id) ,"type":"cart_item","quantity": product_quantity}}
 
+    headers = get_headers()
     response = requests.post('{}/carts/{}/items'.format(MOLTIN_API_URL, chat_id), headers=headers, json=data)
     check_response(response)
     message = 'Товар успешно добавлен в корзину. Для просмотра содержимого нажмите кнопку "Корзина" или добавьте еще один товар'
@@ -234,8 +274,11 @@ def handle_card(bot, update):
     else:
         user_reply = user_reply.split(',')
         product_id = str(user_reply[1])
+        
+        headers = get_headers()
         response = requests.delete('{}/carts/{}/items/{}'.format(MOLTIN_API_URL, chat_id, product_id), headers=headers)
         check_response(response)
+        
         card_description, keyboard = get_user_card(chat_id)
         bot.send_message(text=card_description, chat_id=chat_id, reply_markup=keyboard)
         
@@ -281,14 +324,13 @@ def handle_users_reply(bot, update):
         return
     
     user_state = get_user_state(user_reply, chat_id)
-
     states_functions = {
             'START': start,
             'HANDLE_MENU': handle_menu,
             'HANDLE_DESCRIPTION': handle_description,
             'HANDLE_CARD': handle_card,
-            'WAITING_EMAIL': get_expected_email
-        }
+            'WAITING_EMAIL': get_expected_email}
+    
     state_handler = states_functions[user_state]
 
     next_state = state_handler(bot, update)
@@ -304,7 +346,6 @@ def get_database_connection():
     return database
 
 if __name__ == '__main__':
-    
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
     logger.addHandler(MyLogsHandler())
@@ -316,23 +357,10 @@ if __name__ == '__main__':
     grant_type_moltin = 'client_credentials'
     telegram_token = os.environ['TELEGRAM_TOKEN']
     
-    try:
-        authentication_token = get_access_token(client_id_moltin, client_secret_moltin, grant_type_moltin)
-        headers = {'Authorization': authentication_token}
-        updater = Updater(telegram_token)
-        dispatcher = updater.dispatcher
-        dispatcher.add_handler(CallbackQueryHandler(handle_users_reply))
-        dispatcher.add_handler(MessageHandler(Filters.text, handle_users_reply))
-        dispatcher.add_handler(CommandHandler('start', handle_users_reply))
-        updater.start_polling()
-        updater.idle()
-        
-    except ConnectionError as error:
-        logger.exception(f'Возникла ошибка с подключением: {error}')
-        
-    except HTTPError as error:
-        logger.exception(f'Возникла ошибка с HTTP-статусом: {error}')
-    
-    #тут отлавливаем все ошибки, которые привели к падению бота
-    except Exception as error:
-        logger.exception(f'Подключение и HTTP-статус в норме, возникла другая ошибка в боте-магазине: {error}')
+    updater = Updater(telegram_token)
+    dispatcher = updater.dispatcher
+    dispatcher.add_handler(CallbackQueryHandler(handle_users_reply))
+    dispatcher.add_handler(MessageHandler(Filters.text, handle_users_reply))
+    dispatcher.add_handler(CommandHandler('start', handle_users_reply))
+    updater.start_polling()
+    updater.idle()
