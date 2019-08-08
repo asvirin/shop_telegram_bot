@@ -64,7 +64,7 @@ def get_authentication_token():
         answer = response.json()
 
         expires_time = answer['expires']
-        token_expires_time = datetime.datetime.fromtimestamp(expires_time-300)
+        token_expires_time = datetime.datetime.fromtimestamp(expires_time-600)
 
         access_token = answer['access_token']
         token_type = answer['token_type']
