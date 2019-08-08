@@ -45,6 +45,7 @@ def get_headers():
         time.sleep(60)
     except Exception:
         logger.exception('Возникла ошибка ↓')
+        time.sleep(3600)
     
     moltin_headers = {'Authorization': authentication_token}
     
